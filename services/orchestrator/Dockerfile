@@ -18,8 +18,8 @@ COPY agents/ agents/
 COPY graph/ graph/
 COPY tests/ tests/
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -e .
+# Install Python dependencies (including dev for tests)
+RUN pip install --no-cache-dir -e ".[dev]"
 
 # Expose port
 EXPOSE 8001

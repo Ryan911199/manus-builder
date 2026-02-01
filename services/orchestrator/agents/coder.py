@@ -1,7 +1,7 @@
 """Coder agent for code generation."""
 
 
-def generate_code(subtask: str, framework: str, context: dict = None) -> dict:
+def generate_code(subtask: str, framework: str, context: dict | None = None) -> dict:
     """
     Generate code for a specific subtask.
     
