@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # Node.js backend
+  node:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/manus
+      - ORCHESTRATOR_URL=http://orchestrator:8001
+    depends_on:
+      - postgres
+      - orchestrator
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: pnpm dev
+
+  # Python orchestrator service
+  orchestrator:
+    build:
+      context: ./services/orchestrator
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/manus
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
+    depends_on:
+      - postgres
+    volumes:
+      - ./services/orchestrator:/app
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=manus
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
