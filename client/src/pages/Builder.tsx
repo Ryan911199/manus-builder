@@ -1,27 +1,45 @@
 import { useState, useCallback, useMemo } from "react";
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useLLMSettings, LLMProvider } from "@/hooks/useLLMSettings";
 import { getLoginUrl } from "@/const";
-import { 
-  Send, 
-  Play, 
-  Rocket, 
-  FolderOpen, 
-  Save, 
-  Plus, 
-  Settings, 
-  FileCode, 
-  File, 
+import {
+  Send,
+  Play,
+  Rocket,
+  FolderOpen,
+  Save,
+  Plus,
+  Settings,
+  FileCode,
+  File,
   Folder,
   ChevronRight,
   ChevronDown,
@@ -30,13 +48,13 @@ import {
   Code,
   Eye,
   History,
-  Trash2
+  Trash2,
 } from "lucide-react";
-import { 
-  SandpackProvider, 
+import {
+  SandpackProvider,
   SandpackPreview,
   SandpackCodeEditor,
-  useSandpack
+  useSandpack,
 } from "@codesandbox/sandpack-react";
 import { nightOwl } from "@codesandbox/sandpack-themes";
 import CodeMirror from "@uiw/react-codemirror";
@@ -139,13 +157,18 @@ interface FileTreeProps {
 }
 
 function FileTree({ files, selectedFile, onSelectFile }: FileTreeProps) {
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(["/"]));
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
+    new Set(["/"])
+  );
 
   const fileStructure = useMemo(() => {
-    const structure: Record<string, { type: "file" | "folder"; children?: string[] }> = {};
+    const structure: Record<
+      string,
+      { type: "file" | "folder"; children?: string[] }
+    > = {};
     const paths = Object.keys(files).sort();
 
-    paths.forEach((path) => {
+    paths.forEach(path => {
       const parts = path.split("/").filter(Boolean);
       let currentPath = "";
 
@@ -173,7 +196,7 @@ function FileTree({ files, selectedFile, onSelectFile }: FileTreeProps) {
   }, [files]);
 
   const toggleFolder = (path: string) => {
-    setExpandedFolders((prev) => {
+    setExpandedFolders(prev => {
       const next = new Set(prev);
       if (next.has(path)) {
         next.delete(path);
@@ -185,11 +208,16 @@ function FileTree({ files, selectedFile, onSelectFile }: FileTreeProps) {
   };
 
   const getFileIcon = (path: string) => {
-    if (path.endsWith(".jsx") || path.endsWith(".tsx")) return <FileCode className="h-4 w-4 text-blue-400" />;
-    if (path.endsWith(".vue")) return <FileCode className="h-4 w-4 text-green-400" />;
-    if (path.endsWith(".css")) return <FileCode className="h-4 w-4 text-pink-400" />;
-    if (path.endsWith(".html")) return <FileCode className="h-4 w-4 text-orange-400" />;
-    if (path.endsWith(".json")) return <FileCode className="h-4 w-4 text-yellow-400" />;
+    if (path.endsWith(".jsx") || path.endsWith(".tsx"))
+      return <FileCode className="h-4 w-4 text-blue-400" />;
+    if (path.endsWith(".vue"))
+      return <FileCode className="h-4 w-4 text-green-400" />;
+    if (path.endsWith(".css"))
+      return <FileCode className="h-4 w-4 text-pink-400" />;
+    if (path.endsWith(".html"))
+      return <FileCode className="h-4 w-4 text-orange-400" />;
+    if (path.endsWith(".json"))
+      return <FileCode className="h-4 w-4 text-yellow-400" />;
     return <File className="h-4 w-4 text-muted-foreground" />;
   };
 
@@ -209,11 +237,16 @@ function FileTree({ files, selectedFile, onSelectFile }: FileTreeProps) {
             style={{ paddingLeft: `${depth * 12 + 8}px` }}
             onClick={() => toggleFolder(path)}
           >
-            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            {isExpanded ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
             <Folder className="h-4 w-4 text-yellow-500" />
             <span>{name}</span>
           </button>
-          {isExpanded && item.children?.map((child) => renderItem(child, depth + 1))}
+          {isExpanded &&
+            item.children?.map(child => renderItem(child, depth + 1))}
         </div>
       );
     }
@@ -234,13 +267,11 @@ function FileTree({ files, selectedFile, onSelectFile }: FileTreeProps) {
   };
 
   const rootFiles = Object.keys(files)
-    .filter((path) => path.split("/").filter(Boolean).length === 1)
+    .filter(path => path.split("/").filter(Boolean).length === 1)
     .sort();
 
   return (
-    <div className="py-2">
-      {rootFiles.map((path) => renderItem(path, 0))}
-    </div>
+    <div className="py-2">{rootFiles.map(path => renderItem(path, 0))}</div>
   );
 }
 
@@ -256,7 +287,9 @@ interface ChatMessage {
 export default function Builder() {
   const { user, loading: authLoading } = useAuth();
   const [framework, setFramework] = useState<string>("react");
-  const [files, setFiles] = useState<Record<string, string>>(frameworkTemplates.react);
+  const [files, setFiles] = useState<Record<string, string>>(
+    frameworkTemplates.react
+  );
   const [selectedFile, setSelectedFile] = useState<string>("/App.jsx");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -267,12 +300,16 @@ export default function Builder() {
   const [showProjectsDialog, setShowProjectsDialog] = useState(false);
 
   // tRPC queries and mutations
-  const projectsQuery = trpc.projects.list.useQuery(undefined, { enabled: !!user });
+  const projectsQuery = trpc.projects.list.useQuery(undefined, {
+    enabled: !!user,
+  });
   const generateMutation = trpc.ai.generate.useMutation();
   const createProjectMutation = trpc.projects.create.useMutation();
   const updateProjectMutation = trpc.projects.update.useMutation();
   const deleteProjectMutation = trpc.projects.delete.useMutation();
-  const settingsQuery = trpc.deploy.getSettings.useQuery(undefined, { enabled: !!user });
+  const settingsQuery = trpc.deploy.getSettings.useQuery(undefined, {
+    enabled: !!user,
+  });
   const saveSettingsMutation = trpc.deploy.saveSettings.useMutation();
   const testConnectionMutation = trpc.deploy.testConnection.useMutation();
   const deployMutation = trpc.deploy.deployProject.useMutation();
@@ -285,20 +322,35 @@ export default function Builder() {
     coolifyServerUuid: "",
   });
 
+  // LLM settings
+  const {
+    settings: llmSettings,
+    updateSettings: updateLLMSettings,
+    getModelsForProvider,
+    providers: llmProviders,
+  } = useLLMSettings();
+
   // Handle framework change
   const handleFrameworkChange = (newFramework: string) => {
     setFramework(newFramework);
     setFiles(frameworkTemplates[newFramework] || frameworkTemplates.react);
-    setSelectedFile(Object.keys(frameworkTemplates[newFramework] || frameworkTemplates.react)[0]);
+    setSelectedFile(
+      Object.keys(
+        frameworkTemplates[newFramework] || frameworkTemplates.react
+      )[0]
+    );
   };
 
   // Handle file content change
-  const handleFileChange = useCallback((content: string) => {
-    setFiles((prev) => ({
-      ...prev,
-      [selectedFile]: content,
-    }));
-  }, [selectedFile]);
+  const handleFileChange = useCallback(
+    (content: string) => {
+      setFiles(prev => ({
+        ...prev,
+        [selectedFile]: content,
+      }));
+    },
+    [selectedFile]
+  );
 
   // Handle chat submit
   const handleChatSubmit = async () => {
@@ -311,7 +363,7 @@ export default function Builder() {
       timestamp: new Date(),
     };
 
-    setChatMessages((prev) => [...prev, userMessage]);
+    setChatMessages(prev => [...prev, userMessage]);
     setChatInput("");
 
     try {
@@ -328,9 +380,9 @@ export default function Builder() {
         timestamp: new Date(),
       };
 
-      setChatMessages((prev) => [...prev, assistantMessage]);
+      setChatMessages(prev => [...prev, assistantMessage]);
       setFiles(result.files);
-      
+
       // Select first file from generated files
       const firstFile = Object.keys(result.files)[0];
       if (firstFile) {
@@ -377,7 +429,12 @@ export default function Builder() {
   };
 
   // Handle load project
-  const handleLoadProject = (project: { id: number; name: string; framework: string; files: Record<string, string> }) => {
+  const handleLoadProject = (project: {
+    id: number;
+    name: string;
+    framework: string;
+    files: Record<string, string>;
+  }) => {
     setCurrentProjectId(project.id);
     setProjectName(project.name);
     setFramework(project.framework);
@@ -453,8 +510,18 @@ export default function Builder() {
 
   // Get language extension for CodeMirror
   const getLanguageExtension = (path: string) => {
-    if (path.endsWith(".jsx") || path.endsWith(".tsx") || path.endsWith(".js") || path.endsWith(".ts")) {
-      return [javascript({ jsx: true, typescript: path.endsWith(".tsx") || path.endsWith(".ts") })];
+    if (
+      path.endsWith(".jsx") ||
+      path.endsWith(".tsx") ||
+      path.endsWith(".js") ||
+      path.endsWith(".ts")
+    ) {
+      return [
+        javascript({
+          jsx: true,
+          typescript: path.endsWith(".tsx") || path.endsWith(".ts"),
+        }),
+      ];
     }
     if (path.endsWith(".html") || path.endsWith(".vue")) return [html()];
     if (path.endsWith(".css")) return [css()];
@@ -509,7 +576,10 @@ export default function Builder() {
             </SelectContent>
           </Select>
 
-          <Dialog open={showProjectsDialog} onOpenChange={setShowProjectsDialog}>
+          <Dialog
+            open={showProjectsDialog}
+            onOpenChange={setShowProjectsDialog}
+          >
             <DialogTrigger asChild>
               <Button variant="outline" size="sm">
                 <FolderOpen className="h-4 w-4 mr-2" />
@@ -519,14 +589,18 @@ export default function Builder() {
             <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Your Projects</DialogTitle>
-                <DialogDescription>Load or manage your saved projects</DialogDescription>
+                <DialogDescription>
+                  Load or manage your saved projects
+                </DialogDescription>
               </DialogHeader>
               <ScrollArea className="h-80">
                 {projectsQuery.data?.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No projects yet</p>
+                  <p className="text-center text-muted-foreground py-8">
+                    No projects yet
+                  </p>
                 ) : (
                   <div className="space-y-2">
-                    {projectsQuery.data?.map((project) => (
+                    {projectsQuery.data?.map(project => (
                       <div
                         key={project.id}
                         className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent"
@@ -534,11 +608,15 @@ export default function Builder() {
                         <div>
                           <p className="font-medium">{project.name}</p>
                           <p className="text-sm text-muted-foreground">
-                            {project.framework} • Updated {new Date(project.updatedAt).toLocaleDateString()}
+                            {project.framework} • Updated{" "}
+                            {new Date(project.updatedAt).toLocaleDateString()}
                           </p>
                         </div>
                         <div className="flex gap-2">
-                          <Button size="sm" onClick={() => handleLoadProject(project)}>
+                          <Button
+                            size="sm"
+                            onClick={() => handleLoadProject(project)}
+                          >
                             Load
                           </Button>
                           <Button
@@ -575,7 +653,7 @@ export default function Builder() {
                   <Input
                     id="projectName"
                     value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
+                    onChange={e => setProjectName(e.target.value)}
                     placeholder="My Awesome Project"
                   />
                 </div>
@@ -586,62 +664,158 @@ export default function Builder() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={showSettingsDialog} onOpenChange={setShowSettingsDialog}>
+          <Dialog
+            open={showSettingsDialog}
+            onOpenChange={setShowSettingsDialog}
+          >
             <DialogTrigger asChild>
               <Button variant="outline" size="sm">
                 <Settings className="h-4 w-4" />
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg">
+            <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Coolify Settings</DialogTitle>
-                <DialogDescription>Configure your Coolify deployment settings</DialogDescription>
+                <DialogTitle>Settings</DialogTitle>
+                <DialogDescription>
+                  Configure LLM and deployment settings
+                </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="coolifyApiUrl">Coolify API URL</Label>
-                  <Input
-                    id="coolifyApiUrl"
-                    value={settingsForm.coolifyApiUrl}
-                    onChange={(e) => setSettingsForm((prev) => ({ ...prev, coolifyApiUrl: e.target.value }))}
-                    placeholder="https://coolify.example.com"
-                  />
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <h3 className="text-sm font-medium">LLM Provider</h3>
+                  <div>
+                    <Label htmlFor="llmProvider">Provider</Label>
+                    <Select
+                      value={llmSettings.provider}
+                      onValueChange={(value: LLMProvider) =>
+                        updateLLMSettings({ provider: value })
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select provider" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {llmProviders.map(provider => (
+                          <SelectItem key={provider} value={provider}>
+                            {provider.charAt(0).toUpperCase() +
+                              provider.slice(1)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="llmApiKey">API Key</Label>
+                    <Input
+                      id="llmApiKey"
+                      type="password"
+                      value={llmSettings.apiKey}
+                      onChange={e =>
+                        updateLLMSettings({ apiKey: e.target.value })
+                      }
+                      placeholder={
+                        llmSettings.provider === "ollama"
+                          ? "Not required for Ollama"
+                          : "Enter your API key"
+                      }
+                      disabled={llmSettings.provider === "ollama"}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="llmModel">Model</Label>
+                    <Select
+                      value={llmSettings.model}
+                      onValueChange={value =>
+                        updateLLMSettings({ model: value })
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select model" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {getModelsForProvider(llmSettings.provider).map(
+                          model => (
+                            <SelectItem key={model} value={model}>
+                              {model}
+                            </SelectItem>
+                          )
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="coolifyApiToken">API Token</Label>
-                  <Input
-                    id="coolifyApiToken"
-                    type="password"
-                    value={settingsForm.coolifyApiToken}
-                    onChange={(e) => setSettingsForm((prev) => ({ ...prev, coolifyApiToken: e.target.value }))}
-                    placeholder="Your Coolify API token"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="coolifyProjectUuid">Project UUID</Label>
-                  <Input
-                    id="coolifyProjectUuid"
-                    value={settingsForm.coolifyProjectUuid}
-                    onChange={(e) => setSettingsForm((prev) => ({ ...prev, coolifyProjectUuid: e.target.value }))}
-                    placeholder="Project UUID from Coolify"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="coolifyServerUuid">Server UUID</Label>
-                  <Input
-                    id="coolifyServerUuid"
-                    value={settingsForm.coolifyServerUuid}
-                    onChange={(e) => setSettingsForm((prev) => ({ ...prev, coolifyServerUuid: e.target.value }))}
-                    placeholder="Server UUID from Coolify"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={handleTestConnection} className="flex-1">
-                    Test Connection
-                  </Button>
-                  <Button onClick={handleSaveSettings} className="flex-1">
-                    Save Settings
-                  </Button>
+
+                <div className="border-t pt-4 space-y-4">
+                  <h3 className="text-sm font-medium">Coolify Deployment</h3>
+                  <div>
+                    <Label htmlFor="coolifyApiUrl">Coolify API URL</Label>
+                    <Input
+                      id="coolifyApiUrl"
+                      value={settingsForm.coolifyApiUrl}
+                      onChange={e =>
+                        setSettingsForm(prev => ({
+                          ...prev,
+                          coolifyApiUrl: e.target.value,
+                        }))
+                      }
+                      placeholder="https://coolify.example.com"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="coolifyApiToken">API Token</Label>
+                    <Input
+                      id="coolifyApiToken"
+                      type="password"
+                      value={settingsForm.coolifyApiToken}
+                      onChange={e =>
+                        setSettingsForm(prev => ({
+                          ...prev,
+                          coolifyApiToken: e.target.value,
+                        }))
+                      }
+                      placeholder="Your Coolify API token"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="coolifyProjectUuid">Project UUID</Label>
+                    <Input
+                      id="coolifyProjectUuid"
+                      value={settingsForm.coolifyProjectUuid}
+                      onChange={e =>
+                        setSettingsForm(prev => ({
+                          ...prev,
+                          coolifyProjectUuid: e.target.value,
+                        }))
+                      }
+                      placeholder="Project UUID from Coolify"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="coolifyServerUuid">Server UUID</Label>
+                    <Input
+                      id="coolifyServerUuid"
+                      value={settingsForm.coolifyServerUuid}
+                      onChange={e =>
+                        setSettingsForm(prev => ({
+                          ...prev,
+                          coolifyServerUuid: e.target.value,
+                        }))
+                      }
+                      placeholder="Server UUID from Coolify"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={handleTestConnection}
+                      className="flex-1"
+                    >
+                      Test Connection
+                    </Button>
+                    <Button onClick={handleSaveSettings} className="flex-1">
+                      Save Settings
+                    </Button>
+                  </div>
                 </div>
               </div>
             </DialogContent>
@@ -673,10 +847,12 @@ export default function Builder() {
                   {chatMessages.length === 0 ? (
                     <div className="text-center text-muted-foreground py-8">
                       <p>Start a conversation to generate code</p>
-                      <p className="text-sm mt-2">Try: "Create a todo list app"</p>
+                      <p className="text-sm mt-2">
+                        Try: "Create a todo list app"
+                      </p>
                     </div>
                   ) : (
-                    chatMessages.map((msg) => (
+                    chatMessages.map(msg => (
                       <div
                         key={msg.id}
                         className={`p-3 rounded-lg ${
@@ -685,7 +861,9 @@ export default function Builder() {
                             : "bg-muted mr-4"
                         }`}
                       >
-                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                        <p className="text-sm whitespace-pre-wrap">
+                          {msg.content}
+                        </p>
                       </div>
                     ))
                   )}
@@ -701,10 +879,10 @@ export default function Builder() {
                 <div className="flex gap-2">
                   <Textarea
                     value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
+                    onChange={e => setChatInput(e.target.value)}
                     placeholder="Describe what you want to build..."
                     className="min-h-[80px] resize-none"
-                    onKeyDown={(e) => {
+                    onKeyDown={e => {
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
                         handleChatSubmit();
@@ -742,7 +920,10 @@ export default function Builder() {
                     </TabsTrigger>
                   </TabsList>
                 </div>
-                <TabsContent value="editor" className="flex-1 m-0 overflow-hidden">
+                <TabsContent
+                  value="editor"
+                  className="flex-1 m-0 overflow-hidden"
+                >
                   <div className="h-full flex">
                     {/* File tree sidebar */}
                     <div className="w-48 border-r border-border overflow-auto">
@@ -765,7 +946,10 @@ export default function Builder() {
                     </div>
                   </div>
                 </TabsContent>
-                <TabsContent value="files" className="flex-1 m-0 p-4 overflow-auto">
+                <TabsContent
+                  value="files"
+                  className="flex-1 m-0 p-4 overflow-auto"
+                >
                   <div className="space-y-2">
                     {Object.entries(files).map(([path, content]) => (
                       <div key={path} className="p-3 rounded-lg border">
