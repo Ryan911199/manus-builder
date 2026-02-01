@@ -1,9 +1,12 @@
 import { ENV } from "./env";
+import { getRegistry } from "../llm";
 import {
-  getRegistry,
-  OpenAICompatibleProvider,
-  type OpenAICompatibleConfig,
-} from "../llm";
+  createOpenAIProvider,
+  createAnthropicProvider,
+  createMiniMaxProvider,
+  createOllamaProvider,
+  type ProviderName,
+} from "../llm/providers";
 import type { InvokeParams, InvokeResult } from "../llm";
 
 // Re-export types for backward compatibility
@@ -27,64 +30,81 @@ export type {
   InvokeResult,
 } from "../llm";
 
-class DefaultProvider extends OpenAICompatibleProvider {
-  readonly name = "default";
+// Supported provider names
+const SUPPORTED_PROVIDERS: ProviderName[] = ["openai", "anthropic", "minimax", "ollama"];
 
-  protected getDefaultBaseUrl(): string {
-    return "https://api.openai.com";
-  }
-
-  protected getDefaultModel(): string {
-    return "gemini-2.5-flash";
-  }
-
-  protected buildPayload(params: InvokeParams): Record<string, unknown> {
-    const payload = super.buildPayload(params);
-    
-    payload.max_tokens = (params.maxTokens || params.max_tokens) ?? 32768;
-    payload.thinking = {
-      budget_tokens: 128,
-    };
-
-    return payload;
-  }
-}
-
+/**
+ * Initialize the LLM provider registry with all supported providers.
+ * Sets the default provider based on ENV.llmProvider.
+ */
 function initializeRegistry(): void {
   const registry = getRegistry();
   
-  if (registry.has("default")) {
+  // Only initialize once
+  if (registry.has("openai")) {
     return;
   }
 
-  const config: OpenAICompatibleConfig = {
-    apiKey: ENV.llmApiKey || ENV.forgeApiKey,
-    baseUrl: ENV.llmApiUrl || ENV.forgeApiUrl || undefined,
-    model: ENV.llmModel || undefined,
-  };
+  // Register all providers
+  registry.register(createOpenAIProvider());
+  registry.register(createAnthropicProvider());
+  registry.register(createMiniMaxProvider());
+  registry.register(createOllamaProvider());
 
-  const defaultProvider = new DefaultProvider(config);
-  registry.register(defaultProvider, true);
-}
-
-function assertApiKey(): void {
-  const apiKey = ENV.llmApiKey || ENV.forgeApiKey;
-  if (!apiKey) {
-    if (!ENV.isDev) {
-      throw new Error("LLM_API_KEY is not configured");
-    }
-    console.warn("[LLM] API key not configured - LLM calls will fail in production");
+  // Set default based on ENV.llmProvider
+  const preferredProvider = (ENV.llmProvider || "openai") as ProviderName;
+  
+  if (SUPPORTED_PROVIDERS.includes(preferredProvider) && registry.has(preferredProvider)) {
+    registry.setDefault(preferredProvider);
+  } else {
+    // Fallback to openai if invalid provider specified
+    console.warn(`[LLM] Unknown provider "${ENV.llmProvider}", falling back to openai`);
+    registry.setDefault("openai");
   }
 }
 
+/**
+ * Assert that the current provider has an API key configured.
+ */
+function assertApiKey(): void {
+  const registry = getRegistry();
+  const provider = registry.getDefault();
+  
+  if (!provider.isConfigured()) {
+    if (!ENV.isDev) {
+      throw new Error(`[LLM] Provider "${provider.name}" is not configured - missing API key`);
+    }
+    console.warn(`[LLM] Provider "${provider.name}" not configured - LLM calls may fail`);
+  }
+}
+
+/**
+ * Invoke the default LLM provider with the given parameters.
+ */
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
-  assertApiKey();
   initializeRegistry();
+  assertApiKey();
   
   const registry = getRegistry();
   const provider = registry.getDefault();
   
   return provider.invoke(params);
+}
+
+/**
+ * Get all available provider names.
+ */
+export function getAvailableProviders(): string[] {
+  initializeRegistry();
+  return getRegistry().listProviders();
+}
+
+/**
+ * Get the current default provider name.
+ */
+export function getCurrentProvider(): string {
+  initializeRegistry();
+  return getRegistry().getDefaultName() || "openai";
 }
 
 export { getRegistry, initializeRegistry };

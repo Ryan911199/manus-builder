@@ -4,7 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
-import { invokeLLM } from "./_core/llm";
+import { invokeLLM, getAvailableProviders, getCurrentProvider } from "./_core/llm";
 
 // Coolify API helper
 async function callCoolifyApi(
@@ -77,6 +77,17 @@ CMD ["nginx", "-g", "daemon off;"]`;
 
 export const appRouter = router({
   system: systemRouter,
+  
+  // LLM provider management
+  llm: router({
+    providers: publicProcedure.query(() => {
+      return getAvailableProviders();
+    }),
+    
+    current: publicProcedure.query(() => {
+      return getCurrentProvider();
+    }),
+  }),
   
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
