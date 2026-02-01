@@ -15,6 +15,9 @@ from graph.workflow import (
     create_initial_state,
     AgentState,
 )
+from agents.planner import plan_task
+from agents.coder import generate_code
+from agents.reviewer import review_code
 
 # Load environment variables
 load_dotenv()
@@ -44,6 +47,50 @@ class WorkflowResultResponse(BaseModel):
     files: dict[str, str]
     plan: list[str]
     explanation: Optional[str] = None
+
+
+# --- Agent Test Request/Response Models ---
+
+class PlannerTestRequest(BaseModel):
+    """Request model for testing planner agent."""
+    task: str
+    framework: str = "react"
+
+
+class PlannerTestResponse(BaseModel):
+    """Response model for planner test."""
+    subtasks: list[str]
+    reasoning: Optional[str] = None
+    error: Optional[str] = None
+
+
+class CoderTestRequest(BaseModel):
+    """Request model for testing coder agent."""
+    subtask: str
+    framework: str = "react"
+    context: Optional[dict] = None
+
+
+class CoderTestResponse(BaseModel):
+    """Response model for coder test."""
+    files: dict[str, str]
+    explanation: Optional[str] = None
+    error: Optional[str] = None
+
+
+class ReviewerTestRequest(BaseModel):
+    """Request model for testing reviewer agent."""
+    files: dict[str, str]
+    framework: str = "react"
+
+
+class ReviewerTestResponse(BaseModel):
+    """Response model for reviewer test."""
+    approved: bool
+    feedback: str
+    score: Optional[int] = None
+    issues: Optional[list[str]] = None
+    suggestions: Optional[list[str]] = None
 
 
 # --- In-Memory Workflow Store ---
@@ -255,6 +302,70 @@ async def list_workflows() -> dict:
         })
     
     return {"workflows": workflows, "count": len(workflows)}
+
+
+# --- Agent Test Endpoints ---
+
+@app.post("/agents/planner/test")
+async def test_planner(request: PlannerTestRequest) -> PlannerTestResponse:
+    """
+    Test the planner agent independently.
+    
+    Decomposes a task into subtasks without running the full workflow.
+    Useful for testing and debugging the planner's behavior.
+    """
+    result = await asyncio.to_thread(plan_task, request.task, request.framework)
+    
+    return PlannerTestResponse(
+        subtasks=result.get("subtasks", []),
+        reasoning=result.get("reasoning"),
+        error=result.get("error"),
+    )
+
+
+@app.post("/agents/coder/test")
+async def test_coder(request: CoderTestRequest) -> CoderTestResponse:
+    """
+    Test the coder agent independently.
+    
+    Generates code for a specific subtask without running the full workflow.
+    Useful for testing and debugging the coder's behavior.
+    """
+    result = await asyncio.to_thread(
+        generate_code,
+        request.subtask,
+        request.framework,
+        request.context,
+    )
+    
+    return CoderTestResponse(
+        files=result.get("files", {}),
+        explanation=result.get("explanation"),
+        error=result.get("error"),
+    )
+
+
+@app.post("/agents/reviewer/test")
+async def test_reviewer(request: ReviewerTestRequest) -> ReviewerTestResponse:
+    """
+    Test the reviewer agent independently.
+    
+    Reviews provided code files without running the full workflow.
+    Useful for testing and debugging the reviewer's behavior.
+    """
+    result = await asyncio.to_thread(
+        review_code,
+        request.files,
+        request.framework,
+    )
+    
+    return ReviewerTestResponse(
+        approved=result.get("approved", True),
+        feedback=result.get("feedback", ""),
+        score=result.get("score"),
+        issues=result.get("issues"),
+        suggestions=result.get("suggestions"),
+    )
 
 
 if __name__ == "__main__":
