@@ -1,11 +1,16 @@
-import { eq } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { 
+  InsertUser, users, 
+  projects, InsertProject, Project,
+  projectVersions, InsertProjectVersion, ProjectVersion,
+  deployments, InsertDeployment, Deployment,
+  userSettings, InsertUserSettings, UserSettings
+} from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
-// Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
@@ -17,6 +22,8 @@ export async function getDb() {
   }
   return _db;
 }
+
+// ==================== USER QUERIES ====================
 
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) {
@@ -89,4 +96,147 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// ==================== PROJECT QUERIES ====================
+
+export async function createProject(data: InsertProject): Promise<Project> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(projects).values(data);
+  const insertId = result[0].insertId;
+  
+  const [project] = await db.select().from(projects).where(eq(projects.id, insertId));
+  return project;
+}
+
+export async function getProjectById(id: number, userId: number): Promise<Project | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const [project] = await db.select().from(projects)
+    .where(and(eq(projects.id, id), eq(projects.userId, userId)));
+  return project;
+}
+
+export async function getProjectsByUser(userId: number): Promise<Project[]> {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(projects)
+    .where(eq(projects.userId, userId))
+    .orderBy(desc(projects.updatedAt));
+}
+
+export async function updateProject(id: number, userId: number, data: Partial<InsertProject>): Promise<Project | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  await db.update(projects)
+    .set(data)
+    .where(and(eq(projects.id, id), eq(projects.userId, userId)));
+  
+  return getProjectById(id, userId);
+}
+
+export async function deleteProject(id: number, userId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  
+  const result = await db.delete(projects)
+    .where(and(eq(projects.id, id), eq(projects.userId, userId)));
+  
+  return result[0].affectedRows > 0;
+}
+
+// ==================== PROJECT VERSION QUERIES ====================
+
+export async function createProjectVersion(data: InsertProjectVersion): Promise<ProjectVersion> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(projectVersions).values(data);
+  const insertId = result[0].insertId;
+  
+  const [version] = await db.select().from(projectVersions).where(eq(projectVersions.id, insertId));
+  return version;
+}
+
+export async function getProjectVersions(projectId: number): Promise<ProjectVersion[]> {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(projectVersions)
+    .where(eq(projectVersions.projectId, projectId))
+    .orderBy(desc(projectVersions.versionNumber));
+}
+
+export async function getLatestVersionNumber(projectId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  
+  const [latest] = await db.select({ versionNumber: projectVersions.versionNumber })
+    .from(projectVersions)
+    .where(eq(projectVersions.projectId, projectId))
+    .orderBy(desc(projectVersions.versionNumber))
+    .limit(1);
+  
+  return latest?.versionNumber ?? 0;
+}
+
+// ==================== DEPLOYMENT QUERIES ====================
+
+export async function createDeployment(data: InsertDeployment): Promise<Deployment> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(deployments).values(data);
+  const insertId = result[0].insertId;
+  
+  const [deployment] = await db.select().from(deployments).where(eq(deployments.id, insertId));
+  return deployment;
+}
+
+export async function updateDeployment(id: number, data: Partial<InsertDeployment>): Promise<Deployment | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  await db.update(deployments).set(data).where(eq(deployments.id, id));
+  
+  const [deployment] = await db.select().from(deployments).where(eq(deployments.id, id));
+  return deployment;
+}
+
+export async function getDeploymentsByProject(projectId: number): Promise<Deployment[]> {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(deployments)
+    .where(eq(deployments.projectId, projectId))
+    .orderBy(desc(deployments.createdAt));
+}
+
+// ==================== USER SETTINGS QUERIES ====================
+
+export async function getUserSettings(userId: number): Promise<UserSettings | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+  return settings;
+}
+
+export async function upsertUserSettings(userId: number, data: Partial<InsertUserSettings>): Promise<UserSettings> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const existing = await getUserSettings(userId);
+  
+  if (existing) {
+    await db.update(userSettings).set(data).where(eq(userSettings.userId, userId));
+  } else {
+    await db.insert(userSettings).values({ ...data, userId });
+  }
+  
+  const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+  return settings;
+}

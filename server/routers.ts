@@ -1,28 +1,360 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { z } from "zod";
+import * as db from "./db";
+import { invokeLLM } from "./_core/llm";
+
+// Coolify API helper
+async function callCoolifyApi(
+  baseUrl: string,
+  token: string,
+  endpoint: string,
+  method: string = "GET",
+  body?: unknown
+) {
+  const url = `${baseUrl}${endpoint}`;
+  const response = await fetch(url, {
+    method,
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Coolify API error: ${response.status} - ${error}`);
+  }
+  
+  return response.json();
+}
+
+// Generate Dockerfile based on framework
+function generateDockerfile(framework: string, files: Record<string, string>): string {
+  const hasPackageJson = "/package.json" in files;
+  
+  if (framework === "react" || framework === "vue" || framework === "vite") {
+    return `FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]`;
+  }
+  
+  if (framework === "nextjs") {
+    return `FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+
+FROM node:20-alpine
+WORKDIR /app
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/public ./public
+EXPOSE 3000
+CMD ["npm", "start"]`;
+  }
+  
+  // Static HTML fallback
+  return `FROM nginx:alpine
+COPY . /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]`;
+}
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
+  
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
+      return { success: true } as const;
     }),
   }),
 
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
+  // Project management
+  projects: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return db.getProjectsByUser(ctx.user.id);
+    }),
+    
+    get: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return db.getProjectById(input.id, ctx.user.id);
+      }),
+    
+    create: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1).max(255),
+        description: z.string().optional(),
+        framework: z.string().default("react"),
+        files: z.record(z.string(), z.string()),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const project = await db.createProject({
+          userId: ctx.user.id,
+          name: input.name,
+          description: input.description ?? null,
+          framework: input.framework,
+          files: input.files,
+        });
+        
+        // Create initial version
+        await db.createProjectVersion({
+          projectId: project.id,
+          versionNumber: 1,
+          files: input.files,
+          message: "Initial version",
+        });
+        
+        return project;
+      }),
+    
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).max(255).optional(),
+        description: z.string().optional(),
+        files: z.record(z.string(), z.string()).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...data } = input;
+        const project = await db.updateProject(id, ctx.user.id, data);
+        
+        // Create new version if files changed
+        if (data.files && project) {
+          const latestVersion = await db.getLatestVersionNumber(id);
+          await db.createProjectVersion({
+            projectId: id,
+            versionNumber: latestVersion + 1,
+            files: data.files,
+            message: "Updated files",
+          });
+        }
+        
+        return project;
+      }),
+    
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        return db.deleteProject(input.id, ctx.user.id);
+      }),
+    
+    versions: protectedProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ input }) => {
+        return db.getProjectVersions(input.projectId);
+      }),
+  }),
+
+  // AI code generation
+  ai: router({
+    generate: protectedProcedure
+      .input(z.object({
+        prompt: z.string(),
+        framework: z.string().default("react"),
+        existingFiles: z.record(z.string(), z.string()).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const systemPrompt = `You are an expert web developer. Generate clean, working code based on the user's request.
+
+Framework: ${input.framework}
+${input.existingFiles ? `\nExisting files:\n${JSON.stringify(input.existingFiles, null, 2)}` : ""}
+
+IMPORTANT: Return your response as a JSON object with this exact structure:
+{
+  "files": {
+    "/path/to/file.ext": "file content here",
+    ...
+  },
+  "explanation": "Brief explanation of what was created/modified"
+}
+
+For React projects, always include:
+- /App.jsx or /App.tsx
+- /index.html (if needed)
+- /styles.css (if needed)
+
+For Vue projects, always include:
+- /App.vue
+- /main.js
+
+Generate complete, working code that can run in a browser sandbox.`;
+
+        const response = await invokeLLM({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: input.prompt },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "code_generation",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  files: {
+                    type: "object",
+                    additionalProperties: { type: "string" },
+                    description: "Map of file paths to file contents"
+                  },
+                  explanation: {
+                    type: "string",
+                    description: "Brief explanation of the generated code"
+                  }
+                },
+                required: ["files", "explanation"],
+                additionalProperties: false
+              }
+            }
+          }
+        });
+
+        const content = response.choices[0]?.message?.content;
+        if (!content || typeof content !== 'string') {
+          throw new Error("No response from AI");
+        }
+
+        return JSON.parse(content) as { files: Record<string, string>; explanation: string };
+      }),
+  }),
+
+  // Coolify deployment
+  deploy: router({
+    getSettings: protectedProcedure.query(async ({ ctx }) => {
+      const settings = await db.getUserSettings(ctx.user.id);
+      return settings ? {
+        coolifyApiUrl: settings.coolifyApiUrl,
+        coolifyProjectUuid: settings.coolifyProjectUuid,
+        coolifyServerUuid: settings.coolifyServerUuid,
+        hasToken: !!settings.coolifyApiToken,
+      } : null;
+    }),
+    
+    saveSettings: protectedProcedure
+      .input(z.object({
+        coolifyApiUrl: z.string().url(),
+        coolifyApiToken: z.string().min(1),
+        coolifyProjectUuid: z.string().min(1),
+        coolifyServerUuid: z.string().min(1),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return db.upsertUserSettings(ctx.user.id, input);
+      }),
+    
+    testConnection: protectedProcedure.mutation(async ({ ctx }) => {
+      const settings = await db.getUserSettings(ctx.user.id);
+      if (!settings?.coolifyApiUrl || !settings?.coolifyApiToken) {
+        throw new Error("Coolify settings not configured");
+      }
+      
+      try {
+        await callCoolifyApi(settings.coolifyApiUrl, settings.coolifyApiToken, "/api/v1/servers");
+        return { success: true, message: "Connection successful" };
+      } catch (error) {
+        return { success: false, message: error instanceof Error ? error.message : "Connection failed" };
+      }
+    }),
+    
+    deployProject: protectedProcedure
+      .input(z.object({
+        projectId: z.number(),
+        envVars: z.record(z.string(), z.string()).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const settings = await db.getUserSettings(ctx.user.id);
+        if (!settings?.coolifyApiUrl || !settings?.coolifyApiToken || !settings?.coolifyProjectUuid || !settings?.coolifyServerUuid) {
+          throw new Error("Coolify settings not configured");
+        }
+        
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) {
+          throw new Error("Project not found");
+        }
+        
+        // Create deployment record
+        const deployment = await db.createDeployment({
+          projectId: project.id,
+          status: "pending",
+          envVars: input.envVars ?? null,
+        });
+        
+        try {
+          // Generate Dockerfile
+          const dockerfile = generateDockerfile(project.framework, project.files);
+          
+          // Create application in Coolify
+          const appResponse = await callCoolifyApi(
+            settings.coolifyApiUrl,
+            settings.coolifyApiToken,
+            "/api/v1/applications/dockerfile",
+            "POST",
+            {
+              project_uuid: settings.coolifyProjectUuid,
+              server_uuid: settings.coolifyServerUuid,
+              environment_name: "production",
+              dockerfile: dockerfile,
+              name: project.name.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
+              instant_deploy: true,
+              ports_exposes: "80",
+            }
+          );
+          
+          await db.updateDeployment(deployment.id, {
+            status: "building",
+            coolifyAppUuid: appResponse.uuid,
+          });
+          
+          // Deploy the application
+          await callCoolifyApi(
+            settings.coolifyApiUrl,
+            settings.coolifyApiToken,
+            `/api/v1/applications/${appResponse.uuid}/deploy`,
+            "POST"
+          );
+          
+          await db.updateDeployment(deployment.id, {
+            status: "deploying",
+          });
+          
+          return {
+            success: true,
+            deploymentId: deployment.id,
+            appUuid: appResponse.uuid,
+          };
+        } catch (error) {
+          await db.updateDeployment(deployment.id, {
+            status: "failed",
+            errorMessage: error instanceof Error ? error.message : "Deployment failed",
+          });
+          throw error;
+        }
+      }),
+    
+    getDeployments: protectedProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ input }) => {
+        return db.getDeploymentsByProject(input.projectId);
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;
