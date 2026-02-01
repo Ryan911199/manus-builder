@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -299,11 +299,18 @@ export default function Builder() {
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [showProjectsDialog, setShowProjectsDialog] = useState(false);
 
+  // Workflow orchestration state
+  const [workflowId, setWorkflowId] = useState<string | null>(null);
+  const [currentAgent, setCurrentAgent] = useState<string | null>(null);
+  const [isOrchestrating, setIsOrchestrating] = useState(false);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
   // tRPC queries and mutations
   const projectsQuery = trpc.projects.list.useQuery(undefined, {
     enabled: !!user,
   });
   const generateMutation = trpc.ai.generate.useMutation();
+  const orchestrateMutation = trpc.ai.orchestrate.useMutation();
   const createProjectMutation = trpc.projects.create.useMutation();
   const updateProjectMutation = trpc.projects.update.useMutation();
   const deleteProjectMutation = trpc.projects.delete.useMutation();
@@ -313,6 +320,7 @@ export default function Builder() {
   const saveSettingsMutation = trpc.deploy.saveSettings.useMutation();
   const testConnectionMutation = trpc.deploy.testConnection.useMutation();
   const deployMutation = trpc.deploy.deployProject.useMutation();
+  const trpcContext = trpc.useContext();
 
   // Settings form state
   const [settingsForm, setSettingsForm] = useState({
@@ -329,6 +337,64 @@ export default function Builder() {
     getModelsForProvider,
     providers: llmProviders,
   } = useLLMSettings();
+
+  // Poll workflow status when orchestrating
+  useEffect(() => {
+    if (!workflowId || !isOrchestrating) return;
+
+    const pollStatus = async () => {
+      try {
+        const status = await trpcContext.ai.workflowStatus.fetch({
+          workflowId,
+        });
+        setCurrentAgent(status.currentAgent ?? null);
+
+        if (status.status === "completed") {
+          setIsOrchestrating(false);
+          setCurrentAgent(null);
+          if (pollingRef.current) {
+            clearInterval(pollingRef.current);
+            pollingRef.current = null;
+          }
+
+          if (status.files) {
+            setFiles(status.files);
+            const firstFile = Object.keys(status.files)[0];
+            if (firstFile) setSelectedFile(firstFile);
+
+            const assistantMessage: ChatMessage = {
+              id: (Date.now() + 1).toString(),
+              role: "assistant",
+              content: status.explanation || "Code generated successfully!",
+              timestamp: new Date(),
+            };
+            setChatMessages(prev => [...prev, assistantMessage]);
+            toast.success("Code generated successfully!");
+          }
+        } else if (status.status === "failed") {
+          setIsOrchestrating(false);
+          setCurrentAgent(null);
+          if (pollingRef.current) {
+            clearInterval(pollingRef.current);
+            pollingRef.current = null;
+          }
+          toast.error(status.error || "Workflow failed");
+        }
+      } catch {
+        console.error("Failed to poll workflow status");
+      }
+    };
+
+    pollingRef.current = setInterval(pollStatus, 2000);
+    pollStatus();
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [workflowId, isOrchestrating, trpcContext.ai.workflowStatus]);
 
   // Handle framework change
   const handleFrameworkChange = (newFramework: string) => {
@@ -354,7 +420,8 @@ export default function Builder() {
 
   // Handle chat submit
   const handleChatSubmit = async () => {
-    if (!chatInput.trim() || generateMutation.isPending) return;
+    if (!chatInput.trim() || generateMutation.isPending || isOrchestrating)
+      return;
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -364,35 +431,41 @@ export default function Builder() {
     };
 
     setChatMessages(prev => [...prev, userMessage]);
+    const inputText = chatInput;
     setChatInput("");
 
     try {
-      const result = await generateMutation.mutateAsync({
-        prompt: chatInput,
+      const result = await orchestrateMutation.mutateAsync({
+        task: inputText,
         framework,
-        existingFiles: files,
       });
 
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: result.explanation,
-        timestamp: new Date(),
-      };
+      if (result.usedOrchestrator && result.workflowId) {
+        setWorkflowId(result.workflowId);
+        setIsOrchestrating(true);
+        setCurrentAgent("planner");
+      } else if (result.files) {
+        const assistantMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: result.explanation || "Code generated successfully!",
+          timestamp: new Date(),
+        };
 
-      setChatMessages(prev => [...prev, assistantMessage]);
-      setFiles(result.files);
+        setChatMessages(prev => [...prev, assistantMessage]);
+        setFiles(result.files);
 
-      // Select first file from generated files
-      const firstFile = Object.keys(result.files)[0];
-      if (firstFile) {
-        setSelectedFile(firstFile);
+        const firstFile = Object.keys(result.files)[0];
+        if (firstFile) {
+          setSelectedFile(firstFile);
+        }
+
+        toast.success("Code generated successfully!");
       }
-
-      toast.success("Code generated successfully!");
-    } catch (error) {
+    } catch {
       toast.error("Failed to generate code");
-      console.error(error);
+      setIsOrchestrating(false);
+      setCurrentAgent(null);
     }
   };
 
@@ -867,10 +940,16 @@ export default function Builder() {
                       </div>
                     ))
                   )}
-                  {generateMutation.isPending && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
+                  {(generateMutation.isPending ||
+                    orchestrateMutation.isPending ||
+                    isOrchestrating) && (
+                    <div className="flex items-center gap-2 text-muted-foreground p-3 rounded-lg bg-muted/50">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Generating code...</span>
+                      <span>
+                        {currentAgent
+                          ? `Agent: ${currentAgent.charAt(0).toUpperCase() + currentAgent.slice(1)}...`
+                          : "Starting workflow..."}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -893,10 +972,19 @@ export default function Builder() {
                 <Button
                   className="w-full mt-2"
                   onClick={handleChatSubmit}
-                  disabled={!chatInput.trim() || generateMutation.isPending}
+                  disabled={
+                    !chatInput.trim() ||
+                    generateMutation.isPending ||
+                    orchestrateMutation.isPending ||
+                    isOrchestrating
+                  }
                 >
-                  <Send className="h-4 w-4 mr-2" />
-                  Generate
+                  {isOrchestrating ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-2" />
+                  )}
+                  {isOrchestrating ? "Generating..." : "Generate"}
                 </Button>
               </div>
             </div>
