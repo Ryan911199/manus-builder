@@ -1068,6 +1068,9 @@ export default function Builder() {
                   files={files}
                   theme={nightOwl}
                   options={{
+                    bundlerURL: "https://sandpack-bundler.codesandbox.io",
+                    autorun: true,
+                    recompileMode: "delayed",
                     externalResources: ["https://cdn.tailwindcss.com"],
                   }}
                 >
