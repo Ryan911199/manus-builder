@@ -99,6 +99,88 @@ export const appRouter = router({
     current: publicProcedure.query(() => {
       return getCurrentProvider();
     }),
+
+    testKey: publicProcedure
+      .input(
+        z.object({
+          provider: z.string(),
+          apiKey: z.string(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { provider, apiKey } = input;
+
+        if (!apiKey || apiKey.trim() === "") {
+          return {
+            success: false,
+            message: "API key is required",
+          };
+        }
+
+        try {
+          let testProvider;
+          let testModel;
+
+          switch (provider) {
+            case "openai": {
+              const { OpenAIProvider } = await import("./llm/providers/openai");
+              testProvider = new OpenAIProvider({ apiKey });
+              testModel = "gpt-3.5-turbo";
+              break;
+            }
+            case "anthropic": {
+              const { AnthropicProvider } = await import(
+                "./llm/providers/anthropic"
+              );
+              testProvider = new AnthropicProvider({ apiKey });
+              testModel = "claude-3-haiku-20240307";
+              break;
+            }
+            case "minimax": {
+              const { MiniMaxProvider } = await import(
+                "./llm/providers/minimax"
+              );
+              testProvider = new MiniMaxProvider({ apiKey });
+              testModel = "abab6.5s-chat";
+              break;
+            }
+            case "ollama":
+              return {
+                success: true,
+                message: "Ollama does not require API key validation",
+              };
+            default:
+              return {
+                success: false,
+                message: `Unknown provider: ${provider}`,
+              };
+          }
+
+          await testProvider.invoke({
+            model: testModel,
+            messages: [
+              {
+                role: "user",
+                content: "test",
+              },
+            ],
+            maxTokens: 5,
+          });
+
+          return {
+            success: true,
+            message: "API key is valid",
+          };
+        } catch (error) {
+          return {
+            success: false,
+            message:
+              error instanceof Error
+                ? error.message
+                : "API key validation failed",
+          };
+        }
+      }),
   }),
 
   auth: router({

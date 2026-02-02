@@ -319,6 +319,7 @@ export default function Builder() {
   });
   const saveSettingsMutation = trpc.deploy.saveSettings.useMutation();
   const testConnectionMutation = trpc.deploy.testConnection.useMutation();
+  const testLLMKeyMutation = trpc.llm.testKey.useMutation();
   const deployMutation = trpc.deploy.deployProject.useMutation();
   const trpcContext = trpc.useContext();
 
@@ -559,6 +560,23 @@ export default function Builder() {
     }
   };
 
+  // Handle test LLM API key
+  const handleTestLLMKey = async () => {
+    try {
+      const result = await testLLMKeyMutation.mutateAsync({
+        provider: llmSettings.provider,
+        apiKey: llmSettings.apiKey,
+      });
+      if (result.success) {
+        toast.success(result.message);
+      } else {
+        toast.error(result.message);
+      }
+    } catch (error) {
+      toast.error("API key test failed");
+    }
+  };
+
   // Handle deploy
   const handleDeploy = async () => {
     if (!currentProjectId) {
@@ -779,20 +797,37 @@ export default function Builder() {
                   </div>
                   <div>
                     <Label htmlFor="llmApiKey">API Key</Label>
-                    <Input
-                      id="llmApiKey"
-                      type="password"
-                      value={llmSettings.apiKey}
-                      onChange={e =>
-                        updateLLMSettings({ apiKey: e.target.value })
-                      }
-                      placeholder={
-                        llmSettings.provider === "ollama"
-                          ? "Not required for Ollama"
-                          : "Enter your API key"
-                      }
-                      disabled={llmSettings.provider === "ollama"}
-                    />
+                    <div className="flex gap-2">
+                      <Input
+                        id="llmApiKey"
+                        type="password"
+                        value={llmSettings.apiKey}
+                        onChange={e =>
+                          updateLLMSettings({ apiKey: e.target.value })
+                        }
+                        placeholder={
+                          llmSettings.provider === "ollama"
+                            ? "Not required for Ollama"
+                            : "Enter your API key"
+                        }
+                        disabled={llmSettings.provider === "ollama"}
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={handleTestLLMKey}
+                        disabled={
+                          testLLMKeyMutation.isPending ||
+                          llmSettings.provider === "ollama" ||
+                          !llmSettings.apiKey
+                        }
+                      >
+                        {testLLMKeyMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Test API Key"
+                        )}
+                      </Button>
+                    </div>
                   </div>
                   <div>
                     <Label htmlFor="llmModel">Model</Label>
