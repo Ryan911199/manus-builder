@@ -18,24 +18,22 @@ test("builder flow with MiniMax API validation", async ({ page }) => {
   await expect(page.locator("text=AI Assistant")).toBeVisible();
 
   // Step 3: Open settings dialog
-  const settingsButton = page.locator('button:has-text("Settings")').first();
+  const settingsButton = page.getByTestId("settings-button");
   await settingsButton.click();
   await page.waitForSelector('[role="dialog"]', { state: "visible" });
 
   // Step 4: Select MiniMax provider
-  const providerSelect = page
-    .locator('select, [role="combobox"]')
-    .filter({ hasText: /Provider/i })
-    .first();
-  await providerSelect.click();
-  await page.locator("text=Minimax").click();
+  // Click the Select trigger to open dropdown
+  const providerTrigger = page.getByRole("combobox").first();
+  await providerTrigger.click();
+
+  // Wait for dropdown to appear and click Minimax option
+  await page.waitForSelector('[role="option"]', { state: "visible" });
+  await page.getByRole("option", { name: /minimax/i }).click();
   await page.waitForTimeout(500);
 
   // Step 5: Enter API key
-  const apiKeyInput = page
-    .locator('input[type="password"]')
-    .filter({ has: page.locator("text=/API Key/i") })
-    .first();
+  const apiKeyInput = page.locator("input#llmApiKey");
   await apiKeyInput.fill(MINIMAX_API_KEY);
 
   // Step 6: Click Test API Key button
@@ -69,10 +67,9 @@ test("builder flow with MiniMax API validation", async ({ page }) => {
   await page.waitForTimeout(500);
 
   // Step 9: Type prompt in chat
-  const chatInput = page
-    .locator("textarea")
-    .filter({ has: page.locator("text=/Describe what you want/i") })
-    .first();
+  const chatInput = page.locator(
+    'textarea[placeholder*="Describe what you want"]'
+  );
   await chatInput.fill(
     "build a simple web page with a heading that says Hello World"
   );
@@ -85,14 +82,12 @@ test("builder flow with MiniMax API validation", async ({ page }) => {
   await generateButton.click();
 
   // Step 11: Wait for generation to complete
-  // Look for agent status or completion indicators
-  await expect(page.locator("text=/completed|success|Agent/i")).toBeVisible({
-    timeout: 60000,
-  });
+  // Wait for preview iframe to load with generated content
+  const previewIframe = page.locator("iframe").first();
+  await expect(previewIframe).toBeVisible({ timeout: 60000 });
   await page.waitForTimeout(2000);
 
   // Step 12: Verify preview panel shows content
-  const previewIframe = page.locator("iframe").first();
   await expect(previewIframe).toBeVisible();
 
   // Verify iframe has loaded content

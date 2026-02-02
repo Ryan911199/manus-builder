@@ -772,7 +772,7 @@ export default function Builder() {
             onOpenChange={setShowSettingsDialog}
           >
             <DialogTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" data-testid="settings-button">
                 <Settings className="h-4 w-4" />
               </Button>
             </DialogTrigger>
