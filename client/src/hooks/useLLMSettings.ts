@@ -17,7 +17,7 @@ const DEFAULT_MODELS: Record<LLMProvider, string[]> = {
     "claude-3-5-sonnet-20241022",
     "claude-3-haiku-20240307",
   ],
-  minimax: ["abab6.5s-chat", "abab5.5-chat"],
+  minimax: ["MiniMax-M2.1", "MiniMax-M2"],
   ollama: ["llama3", "mistral", "codellama", "phi"],
 };
 

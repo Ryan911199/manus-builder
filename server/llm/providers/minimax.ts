@@ -1,6 +1,6 @@
 /**
  * MiniMax Provider
- * 
+ *
  * Implementation for MiniMax's chat completions API.
  * MiniMax uses an OpenAI-compatible API format.
  */
@@ -14,7 +14,7 @@ export interface MiniMaxConfig extends OpenAICompatibleConfig {
 
 export class MiniMaxProvider extends OpenAICompatibleProvider {
   readonly name = "minimax";
-  
+
   private groupId?: string;
 
   constructor(config: Partial<MiniMaxConfig> = {}) {
@@ -31,26 +31,27 @@ export class MiniMaxProvider extends OpenAICompatibleProvider {
 
   protected getDefaultBaseUrl(): string {
     // MiniMax API endpoint - use the global endpoint
-    return "https://api.minimax.chat";
+    return "https://api.minimax.io";
   }
 
   protected getDefaultModel(): string {
     // MiniMax's latest model
-    return "abab6.5s-chat";
+    return "MiniMax-M2.1";
   }
 
   /**
    * Override the API URL to include the group ID if needed.
    */
   protected getApiUrl(): string {
-    const baseUrl = this.config.baseUrl?.replace(/\/$/, "") || this.getDefaultBaseUrl();
-    
-    // MiniMax uses /v1/text/chatcompletion_v2 endpoint
+    const baseUrl =
+      this.config.baseUrl?.replace(/\/$/, "") || this.getDefaultBaseUrl();
+
+    // MiniMax uses /anthropic/v1/messages endpoint (Anthropic-compatible)
     if (this.groupId) {
-      return `${baseUrl}/v1/text/chatcompletion_v2?GroupId=${this.groupId}`;
+      return `${baseUrl}/anthropic/v1/messages?GroupId=${this.groupId}`;
     }
-    
-    return `${baseUrl}/v1/text/chatcompletion_v2`;
+
+    return `${baseUrl}/anthropic/v1/messages`;
   }
 
   /**
