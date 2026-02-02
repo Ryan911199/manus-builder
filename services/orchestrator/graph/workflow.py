@@ -201,6 +201,7 @@ def create_workflow(checkpointer=None):
     
     # Add nodes
     builder.add_node("planner", planner_node)
+    builder.add_node("assign_coders", assign_coders_node)
     builder.add_node("coder", coder_node)
     builder.add_node("reviewer", reviewer_node)
     builder.add_node("coder_revision", coder_revision_node)
@@ -209,12 +210,9 @@ def create_workflow(checkpointer=None):
     builder.add_edge(START, "planner")
     # planner → assign_coders is handled by Command in planner_node
     
-    # assign_coders fans out via Send, then converges to reviewer
-    builder.add_conditional_edges(
-        "assign_coders",
-        assign_coders_node,
-        ["coder"]
-    )
+    # assign_coders returns list[Send] which automatically fans out to coder nodes
+    # LangGraph handles the fan-out, no conditional edges needed
+    
     builder.add_edge("coder", "reviewer")
     # reviewer → END or coder_revision is handled by Command in reviewer_node
     
