@@ -305,6 +305,9 @@ export default function Builder() {
   const [isOrchestrating, setIsOrchestrating] = useState(false);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Editor panel visibility state
+  const [showEditor, setShowEditor] = useState(false);
+
   // tRPC queries and mutations
   const projectsQuery = trpc.projects.list.useQuery(undefined, {
     enabled: !!user,
@@ -667,6 +670,15 @@ export default function Builder() {
             </SelectContent>
           </Select>
 
+          <Button
+            variant={showEditor ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowEditor(!showEditor)}
+          >
+            <Code className="h-4 w-4 mr-2" />
+            Code
+          </Button>
+
           <Dialog
             open={showProjectsDialog}
             onOpenChange={setShowProjectsDialog}
@@ -941,7 +953,7 @@ export default function Builder() {
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden relative">
         <ResizablePanelGroup direction="horizontal">
           {/* Chat Panel */}
           <ResizablePanel defaultSize={25} minSize={20}>
@@ -1027,71 +1039,8 @@ export default function Builder() {
 
           <ResizableHandle withHandle />
 
-          {/* Code Editor Panel */}
-          <ResizablePanel defaultSize={40} minSize={30}>
-            <div className="h-full flex flex-col">
-              <Tabs defaultValue="editor" className="h-full flex flex-col">
-                <div className="border-b border-border px-2">
-                  <TabsList className="h-10">
-                    <TabsTrigger value="editor" className="gap-2">
-                      <Code className="h-4 w-4" />
-                      Editor
-                    </TabsTrigger>
-                    <TabsTrigger value="files" className="gap-2">
-                      <FolderOpen className="h-4 w-4" />
-                      Files
-                    </TabsTrigger>
-                  </TabsList>
-                </div>
-                <TabsContent
-                  value="editor"
-                  className="flex-1 m-0 overflow-hidden"
-                >
-                  <div className="h-full flex">
-                    {/* File tree sidebar */}
-                    <div className="w-48 border-r border-border overflow-auto">
-                      <FileTree
-                        files={files}
-                        selectedFile={selectedFile}
-                        onSelectFile={setSelectedFile}
-                      />
-                    </div>
-                    {/* Code editor */}
-                    <div className="flex-1 overflow-hidden">
-                      <CodeMirror
-                        value={files[selectedFile] || ""}
-                        height="100%"
-                        theme={vscodeDark}
-                        extensions={getLanguageExtension(selectedFile)}
-                        onChange={handleFileChange}
-                        className="h-full"
-                      />
-                    </div>
-                  </div>
-                </TabsContent>
-                <TabsContent
-                  value="files"
-                  className="flex-1 m-0 p-4 overflow-auto"
-                >
-                  <div className="space-y-2">
-                    {Object.entries(files).map(([path, content]) => (
-                      <div key={path} className="p-3 rounded-lg border">
-                        <p className="font-mono text-sm font-medium">{path}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {content.split("\n").length} lines
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </div>
-          </ResizablePanel>
-
-          <ResizableHandle withHandle />
-
-          {/* Preview Panel */}
-          <ResizablePanel defaultSize={35} minSize={25}>
+          {/* Preview Panel - Now the main/center panel */}
+          <ResizablePanel defaultSize={75} minSize={40}>
             <div className="h-full flex flex-col">
               <div className="p-3 border-b border-border flex items-center gap-2">
                 <Eye className="h-4 w-4" />
@@ -1119,6 +1068,71 @@ export default function Builder() {
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>
+
+        {/* Sliding Editor Panel */}
+        <div
+          className="absolute top-0 right-0 h-full w-[45%] bg-background border-l border-border shadow-xl"
+          style={{
+            transform: showEditor ? "translateX(0)" : "translateX(100%)",
+            transition: "transform 0.3s ease-in-out",
+          }}
+        >
+          <div className="h-full flex flex-col">
+            <Tabs defaultValue="editor" className="h-full flex flex-col">
+              <div className="border-b border-border px-2">
+                <TabsList className="h-10">
+                  <TabsTrigger value="editor" className="gap-2">
+                    <Code className="h-4 w-4" />
+                    Editor
+                  </TabsTrigger>
+                  <TabsTrigger value="files" className="gap-2">
+                    <FolderOpen className="h-4 w-4" />
+                    Files
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+              <TabsContent
+                value="editor"
+                className="flex-1 m-0 overflow-hidden"
+              >
+                <div className="h-full flex">
+                  <div className="w-48 border-r border-border overflow-auto">
+                    <FileTree
+                      files={files}
+                      selectedFile={selectedFile}
+                      onSelectFile={setSelectedFile}
+                    />
+                  </div>
+                  <div className="flex-1 overflow-hidden">
+                    <CodeMirror
+                      value={files[selectedFile] || ""}
+                      height="100%"
+                      theme={vscodeDark}
+                      extensions={getLanguageExtension(selectedFile)}
+                      onChange={handleFileChange}
+                      className="h-full"
+                    />
+                  </div>
+                </div>
+              </TabsContent>
+              <TabsContent
+                value="files"
+                className="flex-1 m-0 p-4 overflow-auto"
+              >
+                <div className="space-y-2">
+                  {Object.entries(files).map(([path, content]) => (
+                    <div key={path} className="p-3 rounded-lg border">
+                      <p className="font-mono text-sm font-medium">{path}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {content.split("\n").length} lines
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </div>
       </div>
     </div>
   );
