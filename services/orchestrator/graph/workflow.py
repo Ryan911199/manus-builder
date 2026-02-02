@@ -201,7 +201,6 @@ def create_workflow(checkpointer=None):
     
     # Add nodes
     builder.add_node("planner", planner_node)
-    builder.add_node("assign_coders", assign_coders_node)
     builder.add_node("coder", coder_node)
     builder.add_node("reviewer", reviewer_node)
     builder.add_node("coder_revision", coder_revision_node)
