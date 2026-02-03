@@ -14,8 +14,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.node
-    ports:
-      - "3000:3000"
+    # NOTE: Don't expose ports - Coolify manages external port mapping via Traefik
     environment:
       - NODE_ENV=production
       - PORT=3000
