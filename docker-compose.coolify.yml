@@ -74,6 +74,7 @@ services:
     restart: unless-stopped
     networks:
       - manus-network
+      - coolify
     healthcheck:
       test:
         [
