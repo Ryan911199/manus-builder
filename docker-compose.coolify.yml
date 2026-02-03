@@ -42,6 +42,7 @@ services:
     restart: unless-stopped
     networks:
       - manus-network
+      - coolify
     healthcheck:
       test:
         [
@@ -89,3 +90,5 @@ services:
 networks:
   manus-network:
     driver: bridge
+  coolify:
+    external: true
