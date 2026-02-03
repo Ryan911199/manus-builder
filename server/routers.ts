@@ -344,10 +344,17 @@ Generate complete, working code that can run in a browser sandbox.`;
           throw new Error("No response from AI");
         }
 
-        return JSON.parse(content) as {
-          files: Record<string, string>;
-          explanation: string;
-        };
+        try {
+          return JSON.parse(content) as {
+            files: Record<string, string>;
+            explanation: string;
+          };
+        } catch (parseError) {
+          console.error("[AI] Failed to parse LLM response:", content);
+          throw new Error(
+            `Failed to parse AI response as JSON: ${parseError instanceof Error ? parseError.message : "Unknown error"}`
+          );
+        }
       }),
 
     orchestrate: protectedProcedure
@@ -435,17 +442,24 @@ Generate complete, working code that can run in a browser sandbox.`;
               throw new Error("No response from AI");
             }
 
-            const parsed = JSON.parse(content) as {
-              files: Record<string, string>;
-              explanation: string;
-            };
-            return {
-              workflowId: null,
-              status: "completed",
-              usedOrchestrator: false,
-              files: parsed.files,
-              explanation: parsed.explanation,
-            };
+            try {
+              const parsed = JSON.parse(content) as {
+                files: Record<string, string>;
+                explanation: string;
+              };
+              return {
+                workflowId: null,
+                status: "completed",
+                usedOrchestrator: false,
+                files: parsed.files,
+                explanation: parsed.explanation,
+              };
+            } catch (parseError) {
+              console.error("[AI] Failed to parse LLM response:", content);
+              throw new Error(
+                `Failed to parse AI response as JSON: ${parseError instanceof Error ? parseError.message : "Unknown error"}`
+              );
+            }
           }
           throw error;
         }

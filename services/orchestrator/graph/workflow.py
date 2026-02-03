@@ -142,10 +142,10 @@ def reviewer_node(state: AgentState) -> Command[Literal["coder", "__end__"]]:
             update={
                 "review_feedback": feedback,
                 "iteration": iteration + 1,
-                "current_agent": "reviewer",
+                "current_agent": "coder_revision",
                 "status": "needs_revision",
             },
-            goto="coder"
+            goto="coder_revision"  # Route to revision node, not parallel coder
         )
     
     # Complete the workflow

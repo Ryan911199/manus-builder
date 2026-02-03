@@ -1,6 +1,6 @@
 /**
  * Anthropic Provider
- * 
+ *
  * Custom implementation for Anthropic's Messages API.
  * Anthropic uses a different API format than OpenAI:
  * - Different endpoint: /v1/messages
@@ -63,13 +63,15 @@ export interface AnthropicConfig extends ProviderConfig {
 // Message Conversion Helpers
 // ============================================================================
 
-function normalizeContent(content: MessageContent | MessageContent[]): string | AnthropicContentBlock[] {
+function normalizeContent(
+  content: MessageContent | MessageContent[]
+): string | AnthropicContentBlock[] {
   const parts = Array.isArray(content) ? content : [content];
-  
+
   // If all parts are text, concatenate them
   const textParts: string[] = [];
   const complexParts: AnthropicContentBlock[] = [];
-  
+
   for (const part of parts) {
     if (typeof part === "string") {
       textParts.push(part);
@@ -77,6 +79,10 @@ function normalizeContent(content: MessageContent | MessageContent[]): string | 
       textParts.push(part.text);
     } else if (part.type === "image_url") {
       // Convert OpenAI image_url to Anthropic format
+      if (!part.image_url?.url) {
+        console.warn("[Anthropic] Skipping image_url part with missing URL");
+        continue;
+      }
       const url = part.image_url.url;
       if (url.startsWith("data:")) {
         // Base64 encoded image
@@ -97,12 +103,12 @@ function normalizeContent(content: MessageContent | MessageContent[]): string | 
       }
     }
   }
-  
+
   // If we have only text, return as string
   if (complexParts.length === 0) {
     return textParts.join("\n");
   }
-  
+
   // Mix of text and images
   const result: AnthropicContentBlock[] = [];
   if (textParts.length > 0) {
@@ -112,15 +118,21 @@ function normalizeContent(content: MessageContent | MessageContent[]): string | 
   return result;
 }
 
-function convertMessages(messages: Message[]): { system?: string; messages: AnthropicMessage[] } {
+function convertMessages(messages: Message[]): {
+  system?: string;
+  messages: AnthropicMessage[];
+} {
   let systemPrompt: string | undefined;
   const anthropicMessages: AnthropicMessage[] = [];
-  
+
   for (const msg of messages) {
     if (msg.role === "system") {
       // Anthropic uses a separate system parameter
       const content = normalizeContent(msg.content);
-      systemPrompt = typeof content === "string" ? content : content.map(b => b.text || "").join("\n");
+      systemPrompt =
+        typeof content === "string"
+          ? content
+          : content.map(b => b.text || "").join("\n");
     } else if (msg.role === "user" || msg.role === "assistant") {
       anthropicMessages.push({
         role: msg.role,
@@ -131,13 +143,14 @@ function convertMessages(messages: Message[]): { system?: string; messages: Anth
       const content = normalizeContent(msg.content);
       anthropicMessages.push({
         role: "user",
-        content: typeof content === "string" 
-          ? `Tool response (${msg.name || "unknown"}): ${content}`
-          : content,
+        content:
+          typeof content === "string"
+            ? `Tool response (${msg.name || "unknown"}): ${content}`
+            : content,
       });
     }
   }
-  
+
   return { system: systemPrompt, messages: anthropicMessages };
 }
 
@@ -147,7 +160,7 @@ function convertResponse(response: AnthropicResponse): InvokeResult {
     .filter(block => block.type === "text")
     .map(block => block.text || "")
     .join("");
-  
+
   return {
     id: response.id,
     created: Date.now(),
@@ -176,7 +189,7 @@ function convertResponse(response: AnthropicResponse): InvokeResult {
 
 export class AnthropicProvider implements LLMProvider {
   readonly name = "anthropic";
-  
+
   private config: AnthropicConfig;
 
   constructor(config: Partial<AnthropicConfig> = {}) {
@@ -191,7 +204,8 @@ export class AnthropicProvider implements LLMProvider {
   }
 
   private getApiUrl(): string {
-    const baseUrl = this.config.baseUrl?.replace(/\/$/, "") || "https://api.anthropic.com";
+    const baseUrl =
+      this.config.baseUrl?.replace(/\/$/, "") || "https://api.anthropic.com";
     return `${baseUrl}/v1/messages`;
   }
 
@@ -213,15 +227,18 @@ export class AnthropicProvider implements LLMProvider {
 
   async invoke(params: InvokeParams): Promise<InvokeResult> {
     if (!this.isConfigured()) {
-      throw new Error(`[${this.name}] Provider not configured - missing API key`);
+      throw new Error(
+        `[${this.name}] Provider not configured - missing API key`
+      );
     }
 
     const { system, messages } = convertMessages(params.messages);
-    
+
     const payload: Record<string, unknown> = {
       model: params.model || this.config.model || this.getDefaultModel(),
       messages,
-      max_tokens: params.maxTokens || params.max_tokens || this.config.maxTokens || 4096,
+      max_tokens:
+        params.maxTokens || params.max_tokens || this.config.maxTokens || 4096,
     };
 
     if (system) {
