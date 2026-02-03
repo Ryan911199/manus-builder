@@ -35,8 +35,7 @@ services:
       # Orchestrator URL (internal docker network)
       - ORCHESTRATOR_URL=http://orchestrator:8001
     depends_on:
-      orchestrator:
-        condition: service_healthy
+      - orchestrator
     restart: unless-stopped
     networks:
       - manus-network
