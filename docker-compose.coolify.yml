@@ -18,6 +18,8 @@ services:
       - "3000"
     labels:
       - "traefik.enable=true"
+      - "traefik.http.routers.http-0-uogskcc08sos0cskwsgww48k-node.service=node"
+      - "traefik.http.routers.https-0-uogskcc08sos0cskwsgww48k-node.service=node"
       - "traefik.http.services.node.loadbalancer.server.port=3000"
     environment:
       - NODE_ENV=production
