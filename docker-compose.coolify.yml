@@ -16,6 +16,9 @@ services:
       dockerfile: Dockerfile.node
     expose:
       - "3000"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.node.loadbalancer.server.port=3000"
     environment:
       - NODE_ENV=production
       - PORT=3000
